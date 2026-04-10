@@ -37,7 +37,7 @@ jobs:
 
       - name: Check for em dashes
         run: |
-          if grep -rn '—' --include='*.ts' --include='*.tsx' --include='*.md' .; then
+          if grep -rn '—' --include='*.ts' --include='*.tsx' --include='*.md' --exclude-dir=node_modules --exclude-dir=.next --exclude-dir=out .; then
             echo "::error::Em dashes found in source files. Use hyphens (-) instead."
             exit 1
           fi
