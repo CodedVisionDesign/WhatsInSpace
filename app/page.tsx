@@ -142,12 +142,9 @@ export default function Page() {
       if (frameRef.current) cancelAnimationFrame(frameRef.current)
       frameRef.current = requestAnimationFrame(() => {
         const isLandscape = window.innerWidth > window.innerHeight
-        let x = 0
-        if (isLandscape) {
-          x = Math.max(-1, Math.min(1, (e.beta || 0) / 45))
-        } else {
-          x = Math.max(-1, Math.min(1, (e.gamma || 0) / 45))
-        }
+        const x = isLandscape
+          ? Math.max(-1, Math.min(1, (e.beta || 0) / 45))
+          : Math.max(-1, Math.min(1, (e.gamma || 0) / 45))
         setMousePosition({ x, y: 0 })
       })
     }
