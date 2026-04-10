@@ -2,7 +2,7 @@
 
 import Image from "next/image"
 import Link from "next/link"
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import dynamic from "next/dynamic"
 import { crewData } from "@/lib/crew-data"
 import Header from "@/components/Header"
@@ -79,8 +79,8 @@ function InstagramIcon() {
 
 export default function Page() {
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 })
-  const [needsPermission, setNeedsPermission] = useState(false)
   const [gyroActive, setGyroActive] = useState(false)
+  const gyroRequested = useRef(false)
   const [shouldAnimate, setShouldAnimate] = useState(false)
   const [animationComplete, setAnimationComplete] = useState(false)
   const hasSeenAnimation = useRef(false)
@@ -109,24 +109,26 @@ export default function Page() {
     return () => observer.disconnect()
   }, [])
 
-  const requestOrientation = async () => {
+  /**
+   * Request gyro permission silently on the user's first natural touch.
+   * iOS requires requestPermission to be called from a user gesture,
+   * so we hook into the first touchstart instead of showing a button.
+   */
+  const requestOrientationSilently = useCallback(async () => {
+    if (gyroRequested.current) return
+    gyroRequested.current = true
     if (typeof (DeviceOrientationEvent as any).requestPermission === "function") {
       try {
-        const permissionState = await (DeviceOrientationEvent as any).requestPermission()
-        if (permissionState === "granted") {
-          setNeedsPermission(false)
+        const state = await (DeviceOrientationEvent as any).requestPermission()
+        if (state === "granted") {
           setGyroActive(true)
           setShouldAnimate(true)
         }
-      } catch (error) {
-        console.error("Permission denied:", error)
+      } catch {
+        // User denied the native browser prompt - parallax just uses mouse/scroll
       }
-    } else {
-      setNeedsPermission(false)
-      setGyroActive(true)
-      setShouldAnimate(true)
     }
-  }
+  }, [])
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
@@ -156,8 +158,10 @@ export default function Page() {
 
     if (isTouchDevice) {
       if (typeof (DeviceOrientationEvent as any).requestPermission === "function") {
-        setNeedsPermission(true)
+        // iOS: request on first natural touch instead of showing a button
+        window.addEventListener("touchstart", requestOrientationSilently, { once: true })
       } else {
+        // Android/other: gyro available without permission
         setGyroActive(true)
         setShouldAnimate(true)
       }
@@ -172,10 +176,11 @@ export default function Page() {
 
     return () => {
       window.removeEventListener("mousemove", handleMouseMove)
+      window.removeEventListener("touchstart", requestOrientationSilently)
       window.removeEventListener("deviceorientation", handleOrientation)
       if (frameRef.current) cancelAnimationFrame(frameRef.current)
     }
-  }, [gyroActive])
+  }, [gyroActive, requestOrientationSilently])
 
   // Lock scroll during hero animation, unlock when complete
   // Only play animation on first visit per session
@@ -250,17 +255,6 @@ export default function Page() {
       <Header />
       {/* Hero Section */}
       <section className="relative h-dvh w-full overflow-hidden bg-black">
-        {needsPermission && (
-          <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/80">
-            <button
-              onClick={requestOrientation}
-              className="px-8 py-4 bg-orange-600 text-white text-xl font-bold rounded-lg hover:bg-orange-700 transition-colors"
-            >
-              Enable Parallax Effect
-            </button>
-          </div>
-        )}
-
         <div
           className={`absolute inset-0 ${shouldAnimate ? "zoom-layer-1" : ""}`}
           style={{
