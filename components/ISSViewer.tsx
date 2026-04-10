@@ -144,7 +144,7 @@ interface ISSViewerProps {
 export default function ISSViewer({ zoomLevel = 0 }: ISSViewerProps) {
   return (
     <div className="relative z-10 w-full aspect-[16/9] max-h-[50vh] overflow-hidden">
-      <Canvas camera={{ position: [0, 3, 8], fov: 50 }} gl={{ antialias: true, alpha: true }} style={{ background: "transparent" }}>
+      <Canvas camera={{ position: [0, 3, 8], fov: 50 }} gl={{ antialias: true }} style={{ background: "#000" }}>
         <ambientLight intensity={0.3} />
         <directionalLight position={[-5, 5, 5]} intensity={2.5} color="#fff5e0" />
         <directionalLight position={[5, -2, -3]} intensity={0.3} color="#4466ff" />
