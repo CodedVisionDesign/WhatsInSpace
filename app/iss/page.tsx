@@ -330,7 +330,7 @@ export default function ISSPage() {
               <h3 className="text-white font-semibold mb-3">Best viewing times</h3>
               <p className="text-white/50 text-sm leading-relaxed">
                 Look during dawn or dusk when the sky is dark but the ISS is still sunlit.
-                It crosses the sky in 3-5 minutes, traveling from west to east.
+                It crosses the sky in 3-5 minutes, travelling from west to east.
               </p>
             </div>
             <div className="shimmer-card border-glow-hover bg-white/[0.03] border border-white/[0.06] rounded-2xl p-6">

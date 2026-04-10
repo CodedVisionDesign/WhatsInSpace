@@ -44,7 +44,7 @@ const sections = [
       { label: "Material", value: "AVCOAT ablator" },
       { label: "Technique", value: "Skip reentry" },
     ],
-    description: "Orion's heat shield is the largest of its kind ever built, measuring 5 meters in diameter. Made from AVCOAT, an ablative thermal protection material, it protects the crew module during reentry when temperatures reach up to 2,760\u00B0C (5,000\u00B0F) and the spacecraft is traveling at approximately 38,400 km/h (Mach 32). Artemis II uses a skip reentry technique: Orion dips into the upper atmosphere, skips back out like a stone on water, then reenters for final descent. This reduces peak g-forces on the crew from approximately 8g to a more manageable 4g and enables precise splashdown targeting in the Pacific Ocean.",
+    description: "Orion's heat shield is the largest of its kind ever built, measuring 5 meters in diameter. Made from AVCOAT, an ablative thermal protection material, it protects the crew module during reentry when temperatures reach up to 2,760\u00B0C (5,000\u00B0F) and the spacecraft is travelling at approximately 38,400 km/h (Mach 32). Artemis II uses a skip reentry technique: Orion dips into the upper atmosphere, skips back out like a stone on water, then reenters for final descent. This reduces peak g-forces on the crew from approximately 8g to a more manageable 4g and enables precise splashdown targeting in the Pacific Ocean.",
     image: "/images/mission/splashdown.webp",
   },
   {

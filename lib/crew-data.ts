@@ -25,7 +25,7 @@ export const crewData: CrewMember[] = [
     image: "/images/crew/wiseman.webp",
     bio: "U.S. Navy Captain and veteran of Expedition 40/41, with 165 days in space and nearly 13 hours of spacewalk time. Former Chief of the Astronaut Office.",
     fullBio: "Reid Wiseman is a retired U.S. Navy Captain and 27-year Navy veteran from Baltimore, Maryland. Commissioned through ROTC in 1997, he became a Naval Aviator in 1999 and flew F-14 Tomcats on two Middle East deployments supporting Operations Southern Watch, Enduring Freedom, and Iraqi Freedom. He attended the U.S. Naval Test Pilot School in 2004, worked on F-35 and F-18 programs, and later commanded Strike Fighter Squadron 103 flying the FA-18F Super Hornet. Selected as a NASA astronaut in June 2009, he completed training in May 2011 and served as Chief of the Astronaut Office from 2020 through 2022. His late wife, Carroll, was a neonatal intensive care nurse. He considers his time as a single parent his greatest challenge and the most rewarding phase of his life.",
-    funFact: "The Artemis II crew proposed naming a lunar crater after Reid's late wife Carroll, continuing an Apollo-era tradition of honoring loved ones on the Moon.",
+    funFact: "The Artemis II crew proposed naming a lunar crater after Reid's late wife Carroll, continuing an Apollo-era tradition of honouring loved ones on the Moon.",
     x: "astro_reid",
     instagram: "astro_reid",
     highlights: ["F-14 Tomcat pilot", "2 EVAs on ISS", "27-year Navy veteran"],

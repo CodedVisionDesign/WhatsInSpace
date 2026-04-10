@@ -1160,7 +1160,7 @@ export default function TrajectoryViewer() {
           </div>
           <h4 className="text-white font-semibold text-lg mb-2">Escape Velocity</h4>
           <p className="text-white/50 text-sm leading-relaxed">
-            The 5m 55s TLI burn (388 m/s) accelerates Orion past 40,270 km/h, the fastest humans have traveled
+            The 5m 55s TLI burn (388 m/s) accelerates Orion past 40,270 km/h, the fastest humans have travelled
             since Apollo 17 in 1972. The entire ICPS propellant supply is consumed.
           </p>
         </div>

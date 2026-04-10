@@ -480,7 +480,7 @@ export default function Page() {
                   <h4 className="text-xl font-bold text-white mb-1">Artemis I</h4>
                   <p className="text-orange-400 text-xs mb-3">November 2022 | Uncrewed</p>
                   <p className="text-white/50 text-sm leading-relaxed mb-3">
-                    First full test of SLS and Orion. Traveled 2.25M km over 25.5 days, orbiting 130 km above the Moon and venturing 64,373 km beyond it into deep space. Validated heat shield, navigation, and deep-space systems.
+                    First full test of SLS and Orion. Travelled 2.25M km over 25.5 days, orbiting 130 km above the Moon and venturing 64,373 km beyond it into deep space. Validated heat shield, navigation, and deep-space systems.
                   </p>
                   <div className="flex flex-wrap gap-1.5">
                     <span className="text-[11px] px-2 py-0.5 bg-white/5 border border-white/10 rounded text-white/40">25.5 days</span>
@@ -747,7 +747,7 @@ export default function Page() {
             <div className="text-center fade-section">
               <h2 className="text-3xl md:text-5xl font-bold text-white mb-4">Beyond the Far Side</h2>
               <p className="text-white/60 text-lg max-w-xl mx-auto">
-                Orion traveled farther than any spacecraft built for humans has ever flown,
+                Orion travelled farther than any spacecraft built for humans has ever flown,
                 passing behind the Moon before returning safely to Earth.
               </p>
             </div>
@@ -809,7 +809,7 @@ export default function Page() {
                 <span className="text-xl">🪐</span>
                 <div className="text-left">
                   <p className="text-white font-semibold text-sm">Explore the Solar System</p>
-                  <p className="text-white/40 text-xs">Journey through our cosmic neighborhood</p>
+                  <p className="text-white/40 text-xs">Journey through our cosmic neighbourhood</p>
                 </div>
               </a>
               <a href="/#crew" className="group press-spring shimmer-card border-glow-hover flex items-center gap-3 px-6 py-4 bg-white/[0.04] border border-white/10 rounded-xl hover:bg-white/[0.08] hover:border-white/20 transition-all">

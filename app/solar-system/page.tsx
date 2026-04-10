@@ -53,7 +53,7 @@ export default function SolarSystemPage() {
           <p className="text-orange-500 uppercase tracking-[0.3em] text-sm font-medium mb-4">Explore</p>
           <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold text-white mb-6">The Solar System</h1>
           <p className="text-white/50 text-lg max-w-2xl mx-auto">
-            Journey through our cosmic neighborhood. Click any planet to explore its secrets,
+            Journey through our cosmic neighbourhood. Click any planet to explore its secrets,
             calculate your weight, discover how long you&apos;d survive, and more.
           </p>
         </div>

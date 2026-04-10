@@ -375,7 +375,7 @@ export const solarSystemData: CelestialBody[] = [
       "Pluto's heart-shaped feature (Tombaugh Regio) is larger than Texas",
       "Pluto and Charon are tidally locked to each other",
       "Pluto's orbit is so elliptical it sometimes comes closer to the Sun than Neptune",
-      "New Horizons took 9.5 years to reach Pluto, traveling at 58,000 km/h",
+      "New Horizons took 9.5 years to reach Pluto, travelling at 58,000 km/h",
     ],
   },
 ]
