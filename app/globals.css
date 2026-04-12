@@ -148,14 +148,14 @@
   h3 { letter-spacing: -0.015em; line-height: 1.2; }
   p { line-height: 1.7; }
 
-  /* Smooth scroll + prevent horizontal overflow on mobile */
+  /* Smooth scroll */
   html {
     scroll-behavior: smooth;
-    overflow-x: hidden;
   }
+  /* Prevent horizontal overflow without breaking position:fixed or gyro events.
+     overflow-x: clip (unlike hidden) does not create a scroll container. */
   body {
-    overflow-x: hidden;
-    max-width: 100vw;
+    overflow-x: clip;
   }
 
   /* Selection */
