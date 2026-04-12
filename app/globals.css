@@ -148,8 +148,15 @@
   h3 { letter-spacing: -0.015em; line-height: 1.2; }
   p { line-height: 1.7; }
 
-  /* Smooth scroll */
-  html { scroll-behavior: smooth; }
+  /* Smooth scroll + prevent horizontal overflow on mobile */
+  html {
+    scroll-behavior: smooth;
+    overflow-x: hidden;
+  }
+  body {
+    overflow-x: hidden;
+    max-width: 100vw;
+  }
 
   /* Selection */
   ::selection {
