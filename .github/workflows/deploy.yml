@@ -350,7 +350,54 @@ jobs:
               }" 2>/dev/null || true
           fi
 
-      # ── 12. Cleanup ────────────────────────────────────────────────────────
+      # ── 12. Create GitHub Issue on deployment failure ──────────────────────
+      - name: Report failure to GitHub Issues
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const subdomain = "${{ steps.config.outputs.subdomain }}";
+            const server = "${{ steps.config.outputs.server }}";
+
+            const body = `## 🔴 Deployment Failure Report
+
+### Deployment Details
+| Field | Value |
+|-------|-------|
+| **Repository** | ${{ github.repository }} |
+| **Branch** | ${{ github.ref_name }} |
+| **Commit** | \`${{ github.sha }}\` |
+| **Subdomain** | \`${subdomain}\` |
+| **Server** | \`${server}\` |
+| **Status** | ❌ FAILED |
+| **Time** | ${new Date().toISOString()} |
+
+### What Happened
+The automated deployment failed during the build or deploy step.
+
+### Next Steps
+1. Review the [Actions log](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+2. Identify the failure reason
+3. Fix the issue in your code
+4. Push to trigger a new deployment
+5. Close this issue when resolved
+
+### View Full Log
+[GitHub Actions Run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})
+
+---
+*Automatically created by GitHub Actions on deployment failure*`;
+
+            // Create the issue
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `🔴 Deployment Failed: ${subdomain || "unknown"} (${context.ref})`,
+              body: body,
+              labels: ['deployment-failure', 'automated']
+            });
+
+      # ── 13. Cleanup ────────────────────────────────────────────────────────
       - name: Cleanup SSH
         if: always()
         run: rm -rf ~/.ssh/deploy_key
