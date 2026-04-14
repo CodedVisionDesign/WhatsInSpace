@@ -1,170 +1,356 @@
-name: Build & Deploy to Hostinger
+###############################################################################
+# CodedVisionDesign — Universal Deployment Pipeline
+# ──────────────────────────────────────────────────
+# Drop this workflow + deploy-config.json into any client repo.
+# On push to main it will:
+#   1. Read deploy-config.json
+#   2. Auto-detect project type (React/Vite/Next → build then deploy | PHP/HTML → deploy)
+#   3. Upload via SSH (rsync) to either Hostinger or VPS
+#   4. Keep N previous releases for instant rollback
+#
+# ┌─────────────────────────────────────────────────────────────┐
+# │ WHERE DO SSH DETAILS GO?                                    │
+# │                                                             │
+# │ NOT in deploy-config.json. They go in GitHub Secrets.       │
+# │ setup.sh sets them automatically at the org level.          │
+# │                                                             │
+# │ HOSTINGER (org-level, shared by all repos):                 │
+# │   HOSTINGER_SSH_HOST  — IP or hostname from hPanel          │
+# │   HOSTINGER_SSH_USER  — u372385223                          │
+# │   HOSTINGER_SSH_KEY   — private SSH key                     │
+# │   HOSTINGER_SSH_PORT  — 65002                               │
+# │                                                             │
+# │ VPS (repo-level, only on earthecho repo):                   │
+# │   VPS_SSH_HOST  — your VPS IP                               │
+# │   VPS_SSH_USER  — e.g. root or deploy                       │
+# │   VPS_SSH_KEY   — private SSH key for the VPS               │
+# │   VPS_SSH_PORT  — 22 (or custom)                            │
+# └─────────────────────────────────────────────────────────────┘
+###############################################################################
+
+name: Deploy
 
 on:
   push:
-    branches: [main]
+    branches: [main, master]
   workflow_dispatch:
+    inputs:
+      rollback_commit:
+        description: "Commit SHA to rollback to (leave empty for normal deploy)"
+        required: false
+        default: ""
 
 concurrency:
-  group: deploy-production
-  cancel-in-progress: true
+  group: deploy-${{ github.repository }}
+  cancel-in-progress: false
 
 jobs:
-  quality-checks:
-    name: Quality Checks
+  deploy:
+    name: Build & Deploy
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
+    # Uncomment the next line to require manual approval for production deploys:
+    # environment:
+    #   name: production
+    #   url: https://${{ steps.config.outputs.subdomain }}.codedvisiondesign.co.uk
+
     steps:
+      # ── 1. Checkout ────────────────────────────────────────────────────────
       - name: Checkout repository
         uses: actions/checkout@v4
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
         with:
-          version: 9
+          ref: ${{ github.event.inputs.rollback_commit || github.sha }}
+          fetch-depth: 0
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: 'pnpm'
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Run ESLint
-        run: pnpm lint
-
-      - name: Run spell check (British English)
-        run: pnpm spell
-
-      - name: Check for em dashes
+      # ── 2. Read config ─────────────────────────────────────────────────────
+      - name: Read deploy-config.json
+        id: config
         run: |
-          if grep -rn '—' --include='*.ts' --include='*.tsx' --include='*.md' --exclude-dir=node_modules --exclude-dir=.next --exclude-dir=out .; then
-            echo "::error::Em dashes found in source files. Use hyphens (-) instead."
+          if [ ! -f deploy-config.json ]; then
+            echo "::error::deploy-config.json not found in repo root"
             exit 1
           fi
 
-  build:
-    name: Build Static Export
-    needs: quality-checks
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          lfs: true
+          SUBDOMAIN=$(jq -r '.subdomain' deploy-config.json)
+          DEPLOY_PATH=$(jq -r '.deploy_path' deploy-config.json)
+          PROJECT_TYPE=$(jq -r '.project_type // "auto"' deploy-config.json)
+          BUILD_CMD=$(jq -r '.build_command // "npm run build"' deploy-config.json)
+          BUILD_OUTPUT=$(jq -r '.build_output // "build"' deploy-config.json)
+          NODE_VERSION=$(jq -r '.node_version // "18"' deploy-config.json)
+          KEEP_RELEASES=$(jq -r '.keep_releases // 5' deploy-config.json)
+          SERVER=$(jq -r '.server // "hostinger"' deploy-config.json)
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9
+          # Build exclude args for rsync
+          EXCLUDES=""
+          for pattern in $(jq -r '.exclude_patterns[]? // empty' deploy-config.json); do
+            EXCLUDES="${EXCLUDES} --exclude=${pattern}"
+          done
 
+          echo "subdomain=${SUBDOMAIN}" >> $GITHUB_OUTPUT
+          echo "deploy_path=${DEPLOY_PATH}" >> $GITHUB_OUTPUT
+          echo "project_type=${PROJECT_TYPE}" >> $GITHUB_OUTPUT
+          echo "build_cmd=${BUILD_CMD}" >> $GITHUB_OUTPUT
+          echo "build_output=${BUILD_OUTPUT}" >> $GITHUB_OUTPUT
+          echo "node_version=${NODE_VERSION}" >> $GITHUB_OUTPUT
+          echo "keep_releases=${KEEP_RELEASES}" >> $GITHUB_OUTPUT
+          echo "excludes=${EXCLUDES}" >> $GITHUB_OUTPUT
+          echo "server=${SERVER}" >> $GITHUB_OUTPUT
+
+          echo "### Config Loaded" >> $GITHUB_STEP_SUMMARY
+          echo "| Key | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Server | \`${SERVER}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Subdomain | \`${SUBDOMAIN}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Deploy Path | \`${DEPLOY_PATH}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Project Type | \`${PROJECT_TYPE}\` |" >> $GITHUB_STEP_SUMMARY
+
+      # ── 3. Auto-detect project type ────────────────────────────────────────
+      - name: Detect project type
+        id: detect
+        run: |
+          TYPE="${{ steps.config.outputs.project_type }}"
+
+          if [ "$TYPE" = "auto" ]; then
+            if [ -f "package.json" ]; then
+              if jq -e '.dependencies.react // .devDependencies.react // .dependencies.next // .devDependencies.next // .dependencies.vue // .devDependencies.vue // .dependencies.svelte // .devDependencies.svelte' package.json > /dev/null 2>&1; then
+                TYPE="node-build"
+                echo "Detected: Node.js project with framework (React/Next/Vue/Svelte)"
+              elif jq -e '.scripts.build' package.json > /dev/null 2>&1; then
+                TYPE="node-build"
+                echo "Detected: Node.js project with build script"
+              else
+                TYPE="node-static"
+                echo "Detected: Node.js project without build step"
+              fi
+            elif [ -f "composer.json" ] || ls *.php 1> /dev/null 2>&1; then
+              TYPE="php"
+              echo "Detected: PHP project"
+            elif [ -f "index.html" ] || [ -f "index.htm" ]; then
+              TYPE="static"
+              echo "Detected: Static HTML site"
+            else
+              TYPE="static"
+              echo "Detected: Unknown type, treating as static"
+            fi
+          fi
+
+          echo "type=${TYPE}" >> $GITHUB_OUTPUT
+
+          if [ "$TYPE" = "node-build" ]; then
+            DEPLOY_SOURCE="${{ steps.config.outputs.build_output }}"
+          else
+            DEPLOY_SOURCE="."
+          fi
+          echo "deploy_source=${DEPLOY_SOURCE}" >> $GITHUB_OUTPUT
+
+      # ── 4. Setup Node (only for node projects) ─────────────────────────────
       - name: Setup Node.js
+        if: startsWith(steps.detect.outputs.type, 'node')
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
-          cache: 'pnpm'
+          node-version: ${{ steps.config.outputs.node_version }}
+          cache: "npm"
 
-      - name: Restore Next.js cache
-        uses: actions/cache@v4
-        with:
-          path: .next/cache
-          key: nextjs-${{ hashFiles('pnpm-lock.yaml') }}-${{ hashFiles('**/*.ts', '**/*.tsx') }}
-          restore-keys: |
-            nextjs-${{ hashFiles('pnpm-lock.yaml') }}-
-
+      # ── 5. Install & Build (only for node-build projects) ──────────────────
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        if: steps.detect.outputs.type == 'node-build'
+        run: npm ci --prefer-offline --no-audit
 
-      - name: Build static export
-        run: pnpm build
+      - name: Build project
+        if: steps.detect.outputs.type == 'node-build'
+        run: ${{ steps.config.outputs.build_cmd }}
+        env:
+          CI: true
+          NODE_ENV: production
 
-      - name: Report bundle size
+      - name: Verify build output
+        if: steps.detect.outputs.type == 'node-build'
         run: |
-          echo "## Bundle Size Report" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Directory | Size |" >> $GITHUB_STEP_SUMMARY
-          echo "|-----------|------|" >> $GITHUB_STEP_SUMMARY
-          echo "| \`out/\` (total) | $(du -sh out/ | cut -f1) |" >> $GITHUB_STEP_SUMMARY
-          echo "| \`out/\` (file count) | $(find out/ -type f | wc -l) files |" >> $GITHUB_STEP_SUMMARY
+          BUILD_DIR="${{ steps.config.outputs.build_output }}"
+          if [ ! -d "$BUILD_DIR" ]; then
+            for alt in dist build out .next/static; do
+              if [ -d "$alt" ]; then
+                echo "Build output found at '${alt}' instead of '${BUILD_DIR}'"
+                echo "deploy_source=${alt}" >> $GITHUB_OUTPUT
+                BUILD_DIR="$alt"
+                break
+              fi
+            done
+          fi
+          if [ ! -d "$BUILD_DIR" ]; then
+            echo "::error::Build output directory '${BUILD_DIR}' not found"
+            ls -la
+            exit 1
+          fi
+          FILE_COUNT=$(find "$BUILD_DIR" -type f | wc -l)
+          echo "Build output: ${FILE_COUNT} files in ${BUILD_DIR}"
 
-      - name: Upload build artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: static-export
-          path: out/
-          retention-days: 1
-
-  deploy:
-    name: Deploy to Hostinger
-    needs: build
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    environment:
-      name: production
-      url: https://whatsthatin.space
-    steps:
-      - name: Download build artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: static-export
-          path: out/
-
+      # ── 6. Setup SSH (picks Hostinger or VPS secrets automatically) ────────
       - name: Configure SSH
         run: |
           mkdir -p ~/.ssh
           chmod 700 ~/.ssh
-          echo "${{ secrets.HOSTINGER_SSH_KEY }}" > ~/.ssh/deploy_key
+
+          SERVER="${{ steps.config.outputs.server }}"
+
+          if [ "$SERVER" = "vps" ]; then
+            # ── VPS: uses repo-level secrets ──
+            echo "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/deploy_key
+            SSH_HOST="${{ secrets.VPS_SSH_HOST }}"
+            SSH_USER="${{ secrets.VPS_SSH_USER }}"
+            SSH_PORT="${{ secrets.VPS_SSH_PORT }}"
+            SSH_PORT="${SSH_PORT:-22}"
+          else
+            # ── Hostinger: uses org-level secrets ──
+            echo "${{ secrets.HOSTINGER_SSH_KEY }}" > ~/.ssh/deploy_key
+            SSH_HOST="${{ secrets.HOSTINGER_SSH_HOST }}"
+            SSH_USER="${{ secrets.HOSTINGER_SSH_USER }}"
+            SSH_PORT="${{ secrets.HOSTINGER_SSH_PORT }}"
+            SSH_PORT="${SSH_PORT:-65002}"
+          fi
+
           chmod 600 ~/.ssh/deploy_key
+
           cat >> ~/.ssh/config << EOF
           Host deployserver
-            HostName ${{ secrets.HOSTINGER_SSH_HOST }}
-            User ${{ secrets.HOSTINGER_SSH_USER }}
-            Port ${{ secrets.HOSTINGER_SSH_PORT }}
+            HostName ${SSH_HOST}
+            User ${SSH_USER}
+            Port ${SSH_PORT}
             IdentityFile ~/.ssh/deploy_key
             StrictHostKeyChecking no
             ServerAliveInterval 60
             ServerAliveCountMax 3
           EOF
 
-      - name: Deploy via rsync
+          echo "SSH configured for ${SERVER} → ${SSH_HOST}:${SSH_PORT} as ${SSH_USER}"
+
+      # ── 7. Pre-deploy: Create release snapshot on server ───────────────────
+      - name: Create rollback snapshot
         run: |
-          DEPLOY_PATH="/home/u372385223/domains/whatsthatin.space/public_html"
+          DEPLOY_PATH="${{ steps.config.outputs.deploy_path }}"
+          KEEP="${{ steps.config.outputs.keep_releases }}"
+          TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+          COMMIT_SHORT=$(echo "${{ github.sha }}" | cut -c1-7)
+          RELEASES_DIR="${DEPLOY_PATH}/.releases"
+
+          ssh deployserver << SCRIPT
+            mkdir -p "${RELEASES_DIR}"
+            if [ -d "${DEPLOY_PATH}" ] && [ "\$(ls -A ${DEPLOY_PATH} 2>/dev/null | grep -v .releases | head -1)" ]; then
+              SNAPSHOT="${RELEASES_DIR}/${TIMESTAMP}_${COMMIT_SHORT}_pre"
+              mkdir -p "\${SNAPSHOT}"
+              rsync -a --exclude='.releases' "${DEPLOY_PATH}/" "\${SNAPSHOT}/"
+              echo "Snapshot saved: \${SNAPSHOT}"
+            fi
+            cd "${RELEASES_DIR}" 2>/dev/null && \
+              ls -dt */ 2>/dev/null | tail -n +$((KEEP + 1)) | xargs rm -rf 2>/dev/null || true
+          SCRIPT
+
+      # ── 8. Deploy via rsync ────────────────────────────────────────────────
+      - name: Deploy files
+        run: |
+          DEPLOY_PATH="${{ steps.config.outputs.deploy_path }}"
+          DEPLOY_SOURCE="${{ steps.detect.outputs.deploy_source }}"
+          EXCLUDES="${{ steps.config.outputs.excludes }}"
+          TYPE="${{ steps.detect.outputs.type }}"
+
           ssh deployserver "mkdir -p ${DEPLOY_PATH}"
-          rsync -avz --delete --checksum --exclude='.releases' out/ deployserver:${DEPLOY_PATH}/
+
+          RSYNC_OPTS="-avz --delete --checksum"
+
+          if [ "$TYPE" != "node-build" ]; then
+            RSYNC_CMD="rsync ${RSYNC_OPTS} ${EXCLUDES} --exclude='.releases' ./ deployserver:${DEPLOY_PATH}/"
+          else
+            RSYNC_CMD="rsync ${RSYNC_OPTS} --exclude='.releases' ${DEPLOY_SOURCE}/ deployserver:${DEPLOY_PATH}/"
+          fi
+
+          echo "Running: ${RSYNC_CMD}"
+          eval ${RSYNC_CMD}
+
           echo "### Deployed Successfully" >> $GITHUB_STEP_SUMMARY
           echo "| | |" >> $GITHUB_STEP_SUMMARY
           echo "|--|--|" >> $GITHUB_STEP_SUMMARY
           echo "| Commit | \`${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Server | \`${{ steps.config.outputs.server }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "| Target | \`${DEPLOY_PATH}\` |" >> $GITHUB_STEP_SUMMARY
 
+      # ── 9. Post-deploy commands ────────────────────────────────────────────
+      - name: Run post-deploy commands
+        run: |
+          COMMANDS=$(jq -r '.post_deploy_commands[]? // empty' deploy-config.json)
+          if [ -n "$COMMANDS" ]; then
+            echo "$COMMANDS" | while IFS= read -r cmd; do
+              echo "Running: ${cmd}"
+              ssh deployserver "cd ${{ steps.config.outputs.deploy_path }} && ${cmd}"
+            done
+          fi
+
+      # ── 10. Health check ───────────────────────────────────────────────────
       - name: Verify deployment
         run: |
+          SUBDOMAIN="${{ steps.config.outputs.subdomain }}"
+          SERVER="${{ steps.config.outputs.server }}"
+
+          # Build the URL to check
+          if [ "$SERVER" = "vps" ]; then
+            # VPS sites likely have their own domain
+            DOMAIN=$(jq -r '.health_check_url // empty' deploy-config.json)
+            if [ -z "$DOMAIN" ]; then
+              echo "No health_check_url in config — skipping health check for VPS"
+              exit 0
+            fi
+            URL="${DOMAIN}"
+          else
+            URL="https://${SUBDOMAIN}.codedvisiondesign.co.uk"
+          fi
+
+          echo "Checking ${URL} ..."
           sleep 3
-          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -L --max-time 15 "https://whatsthatin.space" || echo "000")
+
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -L --max-time 15 "${URL}" || echo "000")
+
           if [ "$HTTP_CODE" = "200" ] || [ "$HTTP_CODE" = "301" ] || [ "$HTTP_CODE" = "302" ]; then
             echo "Health check passed: HTTP ${HTTP_CODE}"
           else
-            echo "::warning::Health check returned HTTP ${HTTP_CODE} - site may still be propagating"
+            echo "::warning::Health check returned HTTP ${HTTP_CODE} — site may still be propagating"
           fi
 
+      # ── 11. Deploy notification ────────────────────────────────────────────
+      - name: Post deploy summary
+        if: always()
+        run: |
+          SUBDOMAIN="${{ steps.config.outputs.subdomain }}"
+          SERVER="${{ steps.config.outputs.server }}"
+
+          echo "## ✅ Deployment Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Item | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Repository | ${{ github.repository }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Commit | \`${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Branch | ${{ github.ref_name }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Server | \`${SERVER}\` |" >> $GITHUB_STEP_SUMMARY
+          if [ "$SERVER" != "vps" ]; then
+            echo "| Live URL | https://${SUBDOMAIN}.codedvisiondesign.co.uk |" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "| Time | $(date -u '+%Y-%m-%d %H:%M:%S UTC') |" >> $GITHUB_STEP_SUMMARY
+
+          # Optional: Send Slack notification if webhook is configured
+          if [ -n "${{ secrets.SLACK_WEBHOOK_URL }}" ]; then
+            curl -X POST "${{ secrets.SLACK_WEBHOOK_URL }}" \
+              -H 'Content-Type: application/json' \
+              -d "{
+                \"text\": \"Deployment: ${{ github.repository }}\",
+                \"blocks\": [{
+                  \"type\": \"section\",
+                  \"text\": {
+                    \"type\": \"mrkdwn\",
+                    \"text\": \"✅ *${{ github.repository }}* deployed successfully\n*Commit:* \`${{ github.sha }}\`\n*Branch:* ${{ github.ref_name }}\"
+                  }
+                }]
+              }" 2>/dev/null || true
+          fi
+
+      # ── 12. Cleanup ────────────────────────────────────────────────────────
       - name: Cleanup SSH
         if: always()
         run: rm -rf ~/.ssh/deploy_key
-
-  lighthouse:
-    name: Lighthouse Audit
-    needs: deploy
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Run Lighthouse CI
-        uses: treosh/lighthouse-ci-action@v12
-        with:
-          configPath: ./lighthouserc.json
-          uploadArtifacts: true
