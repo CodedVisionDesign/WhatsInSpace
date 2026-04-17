@@ -49,10 +49,9 @@ jobs:
     name: Build & Deploy
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    # Uncomment the next line to require manual approval for production deploys:
-    # environment:
-    #   name: production
-    #   url: https://${{ steps.config.outputs.subdomain }}.codedvisiondesign.co.uk
+    environment:
+      name: production
+      url: https://whatsthatin.space
 
     steps:
       # ── 1. Checkout ────────────────────────────────────────────────────────
